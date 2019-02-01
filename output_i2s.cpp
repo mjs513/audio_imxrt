@@ -80,7 +80,7 @@ PROGMEM
 void set_audioClock(int nfact, int32_t nmult, uint32_t ndiv) // sets PLL4
 {
 	if (CCM_ANALOG_PLL_AUDIO & CCM_ANALOG_PLL_AUDIO_ENABLE) return;
-
+		
 	CCM_ANALOG_PLL_AUDIO = 0;
 	//CCM_ANALOG_PLL_AUDIO |= CCM_ANALOG_PLL_AUDIO_BYPASS;
 	CCM_ANALOG_PLL_AUDIO |= CCM_ANALOG_PLL_AUDIO_ENABLE
@@ -99,25 +99,25 @@ void set_audioClock(int nfact, int32_t nmult, uint32_t ndiv) // sets PLL4
 
 I2S_STRUCT *i2s;
 
-void sai_rxConfig(int ndiv, int nch, int nbits, int nw, int tdm, int sync)
+void sai_rxConfig(int nbits, int nw, int sync)
 {
 	i2s->RX.MR = 0;
 	i2s->RX.CSR = 0;
 	i2s->RX.CR1 = I2S_RCR1_RFW(1);
 	i2s->RX.CR2 = I2S_RCR2_SYNC(sync) | I2S_RCR2_BCP  // sync=0; rx is async;
-		    | (I2S_RCR2_BCD | I2S_RCR2_DIV((ndiv-1)) | I2S_RCR2_MSEL(1));
+		    | (I2S_RCR2_BCD | I2S_RCR2_DIV((1)) | I2S_RCR2_MSEL(1));
 	i2s->RX.CR3 = I2S_RCR3_RCE;
 	i2s->RX.CR4 = I2S_RCR4_FRSZ((nw-1)) | I2S_RCR4_SYWD((nbits-1)) | I2S_RCR4_MF | I2S_RCR4_FSE | I2S_RCR4_FSP | I2S_RCR4_FSD;
 	i2s->RX.CR5 = I2S_RCR5_WNW((nbits-1)) | I2S_RCR5_W0W((nbits-1)) | I2S_RCR5_FBT((nbits-1));
 }
 
-void sai_txConfig(int ndiv, int nbits, int nw, int sync)
+void sai_txConfig(int nbits, int nw, int sync)
 {
 	i2s->TX.MR = 0;
 	i2s->TX.CSR = 0;
 	i2s->TX.CR1 = I2S_TCR1_RFW(1);
 	i2s->TX.CR2 = I2S_TCR2_SYNC(sync) | I2S_TCR2_BCP // sync=0; tx is async;
-		    | (I2S_TCR2_BCD | I2S_TCR2_DIV((ndiv-1)) | I2S_TCR2_MSEL(1));
+		    | (I2S_TCR2_BCD | I2S_TCR2_DIV((1)) | I2S_TCR2_MSEL(1));
 	i2s->TX.CR3 = I2S_TCR3_TCE;
 	i2s->TX.CR4 = I2S_TCR4_FRSZ((nw-1)) | I2S_TCR4_SYWD((nbits-1)) | I2S_TCR4_MF | I2S_TCR4_FSD | I2S_TCR4_FSE | I2S_TCR4_FSP;
 	i2s->TX.CR5 = I2S_TCR5_WNW((nbits-1)) | I2S_TCR5_W0W((nbits-1)) | I2S_TCR5_FBT((nbits-1));
@@ -146,26 +146,22 @@ void AudioOutputI2S::begin(void)
 #endif
 	//PLL:
 	// (a + b / c) * 24MHz, set_audioClock(a, b, c) , a>=27 and a <=54
-	//set_audioClock(32,  77,  100); // 786480000 (default)
-	//set_audioClock(32, 768, 1000); // 786432000
-	set_audioClock(37, 632,1000);  // 903168000
-
+	
+	int fs = AUDIO_SAMPLE_RATE_EXACT;
+	// PLL between 27*24 = 648MHz und 54*24=1296MHz
+	int n1 = 4; //SAI prescaler 4 => (n1*n2) = multiple of 4
+	int n2 = 1+(24000000*27)/(fs*256*n1); 
+	double C = ((double)fs*256*n1*n2)/24000000;
+	int c0 = C;
+	int c2 = 10000;
+	int c1 = C*c2-(c0*c2);	
+	set_audioClock(c0, c1, c2);
+	
+	int nch = 1;// number of channels
+	int nw = 2; // words / channel
+	int nbits = 32;// bits / word	
+	
 	//SAI PG 2735
-	//Setup:
-	//unsigned fs = AUDIO_SAMPLE_RATE_EXACT; // FrameSync Hz
-	unsigned fs = 44100;
-	unsigned nch = 1;// number of channels
-	unsigned nw = 2; // words / channel
-	unsigned nbits = 32;// bits / word
-//	unsigned bit_clk = fs*(nw*nbits);
-
-//TODO: Calculate these
-	unsigned nov = 4; // factor of oversampling MCKL/BCKL
-//	unsigned fs_mclk = nov*bit_clk; // here 49.152 MHz
-	unsigned n1 = 4; // to ensure that input to last divisor (i.e. n2) is < 300 MHz
-	//unsigned n2 = (4 * 192000) / fs; // to reduce clock further to become MCLK (n2=4 -> fs=192000)
-	unsigned n2 = 20;
-
 #if defined(SAI1)
 	CCM_CCGR5 |= CCM_CCGR5_SAI1(CCM_CCGR_ON);
 
@@ -179,8 +175,8 @@ void AudioOutputI2S::begin(void)
 	IOMUXC_GPR_GPR1 = (IOMUXC_GPR_GPR1 & ~(IOMUXC_GPR_GPR1_SAI1_MCLK1_SEL_MASK))
 			| (IOMUXC_GPR_GPR1_SAI1_MCLK_DIR | IOMUXC_GPR_GPR1_SAI1_MCLK1_SEL(0));	//Select MCLK
 	i2s = ((I2S_STRUCT *)0x40384000);
-	sai_rxConfig(nov /2, nch, nbits, nw, 0, 0);
-	sai_txConfig(nov /2, nbits, nw,  1);
+	sai_rxConfig(nbits, nw, 0);
+	sai_txConfig(nbits, nw, 1);
 	dma.triggerAtHardwareEvent(DMAMUX_SOURCE_SAI1_TX);
 #elif defined(SAI2)
 	CCM_CCGR5 |= CCM_CCGR5_SAI2(CCM_CCGR_ON);
@@ -192,8 +188,8 @@ void AudioOutputI2S::begin(void)
 	IOMUXC_GPR_GPR1 = (IOMUXC_GPR_GPR1 & ~(IOMUXC_GPR_GPR1_SAI2_MCLK3_SEL_MASK))
 			| (IOMUXC_GPR_GPR1_SAI2_MCLK_DIR | IOMUXC_GPR_GPR1_SAI2_MCLK3_SEL(0));	//Select MCLK
 	i2s = ((I2S_STRUCT *)0x40388000);
-	sai_rxConfig(nov/2 , nch, nbits, nw,0, 1);
-	sai_txConfig(nov/2 , nbits, nw, 0);
+	sai_rxConfig(nbits, nw, 1);
+	sai_txConfig(nbits, nw, 0);
 	dma.triggerAtHardwareEvent(DMAMUX_SOURCE_SAI2_TX);
 #endif
 	dma.TCD->SADDR = i2s_tx_buffer;
