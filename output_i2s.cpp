@@ -39,9 +39,6 @@ static uint32_t i2s_tx_buffer[AUDIO_BLOCK_SAMPLES];
 DMAChannel AudioOutputI2S::dma(false);
 
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
-
-//TODO Cleanup - ISR() and update() are indentical to KINETISK
-
 #define SAI1
 //#define SAI2
 
@@ -144,20 +141,19 @@ void AudioOutputI2S::begin(void)
 	CORE_PIN2_CONFIG  = 2;  //2:TX_DATA0
 	CORE_PIN33_CONFIG = 2;  //2:RX_DATA0
 #endif
-	//PLL:
-	// (a + b / c) * 24MHz, set_audioClock(a, b, c) , a>=27 and a <=54
-	
+	//PLL:	
 	int fs = AUDIO_SAMPLE_RATE_EXACT;
 	// PLL between 27*24 = 648MHz und 54*24=1296MHz
 	int n1 = 4; //SAI prescaler 4 => (n1*n2) = multiple of 4
-	int n2 = 1+(24000000*27)/(fs*256*n1); 
-	double C = ((double)fs*256*n1*n2)/24000000;
+	int n2 = 1 + (24000000 * 27) / (fs * 256 * n1); 
+	
+	double C = ((double)fs * 256 * n1 * n2) / 24000000;
 	int c0 = C;
 	int c2 = 10000;
-	int c1 = C*c2-(c0*c2);	
+	int c1 = C * c2 - (c0 * c2);	
 	set_audioClock(c0, c1, c2);
 	
-	int nch = 1;// number of channels
+	//int nch = 1;// number of channels
 	int nw = 2; // words / channel
 	int nbits = 32;// bits / word	
 	
@@ -212,115 +208,9 @@ void AudioOutputI2S::begin(void)
 	dma.enable();
 }
 
-void AudioOutputI2S::isr(void)
-{
-	int16_t *dest;
-	audio_block_t *blockL, *blockR;
-	uint32_t saddr, offsetL, offsetR;
+#endif
 
-	saddr = (uint32_t)(dma.TCD->SADDR);
-	dma.clearInterrupt();
-	if (saddr < (uint32_t)i2s_tx_buffer + sizeof(i2s_tx_buffer) / 2) {
-		// DMA is transmitting the first half of the buffer
-		// so we must fill the second half
-		dest = (int16_t *)&i2s_tx_buffer[AUDIO_BLOCK_SAMPLES/2];
-		if (AudioOutputI2S::update_responsibility) AudioStream::update_all();
-
-	} else {
-		// DMA is transmitting the second half of the buffer
-		// so we must fill the first half
-		dest = (int16_t *)i2s_tx_buffer;
-	}
-
-	blockL = AudioOutputI2S::block_left_1st;
-	blockR = AudioOutputI2S::block_right_1st;
-	offsetL = AudioOutputI2S::block_left_offset;
-	offsetR = AudioOutputI2S::block_right_offset;
-
-	if (blockL && blockR) {
-		memcpy_tointerleaveLR(dest, blockL->data + offsetL, blockR->data + offsetR);
-		//for (int i = 0; i< AUDIO_BLOCK_SAMPLES; i++) i2s_tx_buffer[i] = 0x5555;
-		offsetL += AUDIO_BLOCK_SAMPLES / 2;
-		offsetR += AUDIO_BLOCK_SAMPLES / 2;
-	} else if (blockL) {
-		memcpy_tointerleaveL(dest, blockL->data + offsetL);
-		//for (int i = 0; i< AUDIO_BLOCK_SAMPLES; i++) i2s_tx_buffer[i] = 0x5555;
-		offsetL += AUDIO_BLOCK_SAMPLES / 2;
-	} else if (blockR) {
-		memcpy_tointerleaveR(dest, blockR->data + offsetR);
-		//for (int i = 0; i< AUDIO_BLOCK_SAMPLES; i++) i2s_tx_buffer[i] = 0x5555;
-		offsetR += AUDIO_BLOCK_SAMPLES / 2;
-	} else {
-		memset(dest,0,AUDIO_BLOCK_SAMPLES * 2);
-		//for (int i = 0; i< AUDIO_BLOCK_SAMPLES; i++) i2s_tx_buffer[i] = 0x5555;
-		return;
-	}
-
-	if (offsetL < AUDIO_BLOCK_SAMPLES) {
-		AudioOutputI2S::block_left_offset = offsetL;
-	} else {
-		AudioOutputI2S::block_left_offset = 0;
-		AudioStream::release(blockL);
-		AudioOutputI2S::block_left_1st = AudioOutputI2S::block_left_2nd;
-		AudioOutputI2S::block_left_2nd = NULL;
-	}
-	if (offsetR < AUDIO_BLOCK_SAMPLES) {
-		AudioOutputI2S::block_right_offset = offsetR;
-	} else {
-		AudioOutputI2S::block_right_offset = 0;
-		AudioStream::release(blockR);
-		AudioOutputI2S::block_right_1st = AudioOutputI2S::block_right_2nd;
-		AudioOutputI2S::block_right_2nd = NULL;
-	}
-
-}
-
-void AudioOutputI2S::update(void)
-{
-
-	//digitalWriteFast(13,1);
-	audio_block_t *block;
-	block = receiveReadOnly(0); // input 0 = left channel
-	if (block) {
-		__disable_irq();
-		if (block_left_1st == NULL) {
-			block_left_1st = block;
-			block_left_offset = 0;
-			__enable_irq();
-		} else if (block_left_2nd == NULL) {
-			block_left_2nd = block;
-			__enable_irq();
-		} else {
-			audio_block_t *tmp = block_left_1st;
-			block_left_1st = block_left_2nd;
-			block_left_2nd = block;
-			block_left_offset = 0;
-			__enable_irq();
-			release(tmp);
-		}
-	}
-	block = receiveReadOnly(1); // input 1 = right channel
-	if (block) {
-		__disable_irq();
-		if (block_right_1st == NULL) {
-			block_right_1st = block;
-			block_right_offset = 0;
-			__enable_irq();
-		} else if (block_right_2nd == NULL) {
-			block_right_2nd = block;
-			__enable_irq();
-		} else {
-			audio_block_t *tmp = block_right_1st;
-			block_right_1st = block_right_2nd;
-			block_right_2nd = block;
-			block_right_offset = 0;
-			__enable_irq();
-			release(tmp);
-		}
-	}
-}
-
-#else
+#if defined(KINETISK)
 void AudioOutputI2S::begin(void)
 {
 	dma.begin(true); // Allocate the DMA channel first
@@ -332,7 +222,6 @@ void AudioOutputI2S::begin(void)
 	config_i2s();
 	CORE_PIN22_CONFIG = PORT_PCR_MUX(6); // pin 22, PTC1, I2S0_TXD0
 
-#if defined(KINETISK)
 	dma.TCD->SADDR = i2s_tx_buffer;
 	dma.TCD->SOFF = 2;
 	dma.TCD->ATTR = DMA_TCD_ATTR_SSIZE(1) | DMA_TCD_ATTR_DSIZE(1);
@@ -344,7 +233,7 @@ void AudioOutputI2S::begin(void)
 	dma.TCD->DLASTSGA = 0;
 	dma.TCD->BITER_ELINKNO = sizeof(i2s_tx_buffer) / 2;
 	dma.TCD->CSR = DMA_TCD_CSR_INTHALF | DMA_TCD_CSR_INTMAJOR;
-#endif
+
 	dma.triggerAtHardwareEvent(DMAMUX_SOURCE_I2S0_TX);
 	update_responsibility = update_setup();
 	dma.enable();
@@ -353,11 +242,11 @@ void AudioOutputI2S::begin(void)
 	I2S0_TCSR = I2S_TCSR_TE | I2S_TCSR_BCE | I2S_TCSR_FRDE;
 	dma.attachInterrupt(isr);
 }
-
+#endif
 
 void AudioOutputI2S::isr(void)
 {
-#if defined(KINETISK)
+#if defined(KINETISK) || defined(__IMXRT1052__) || defined(__IMXRT1062__)
 	int16_t *dest;
 	audio_block_t *blockL, *blockR;
 	uint32_t saddr, offsetL, offsetR;
@@ -533,7 +422,7 @@ void AudioOutputI2S::update(void)
 	}
 }
 
-
+#if defined(KINETISK) || defined(KINETISL)
 // MCLK needs to be 48e6 / 1088 * 256 = 11.29411765 MHz -> 44.117647 kHz sample rate
 //
 #if F_CPU == 96000000 || F_CPU == 48000000 || F_CPU == 24000000
