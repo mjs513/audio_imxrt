@@ -32,7 +32,7 @@
 
 class AudioMixer4 : public AudioStream
 {
-#if defined(KINETISK) || defined(__IMXRT1052__) || defined(__IMXRT1062__)
+#if defined(__ARM_ARCH_7EM__)
 public:
 	AudioMixer4(void) : AudioStream(4, inputQueueArray) {
 		for (int i=0; i<4; i++) multiplier[i] = 65536;

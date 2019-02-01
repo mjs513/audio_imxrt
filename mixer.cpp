@@ -28,7 +28,7 @@
 #include "mixer.h"
 #include "utility/dspinst.h"
 
-#if defined(KINETISK) || defined(__IMXRT1052__) || defined(__IMXRT1062__)
+#if defined(__ARM_ARCH_7EM__)
 #define MULTI_UNITYGAIN 65536
 
 static void applyGain(int16_t *data, int32_t mult)
