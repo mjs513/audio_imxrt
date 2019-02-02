@@ -530,6 +530,7 @@ bool AudioControlSGTL5000::enable(void)
 	delay(400);
 	write(CHIP_LINE_OUT_VOL, 0x1D1D); // default approx 1.3 volts peak-to-peak
 #if 0
+	//Use PLL:
 	write(CHIP_PLL_CTRL, (15 << 11) | (1267));
 	write(CHIP_ANA_POWER, 0x40FF | (1<<10) | (1 << 8)); // power up: PLL
 	write(CHIP_CLK_CTRL, 0x0004 | 0x03);  // 44.1 kHz, use PLL for mclk
