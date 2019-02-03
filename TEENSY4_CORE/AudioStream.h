@@ -48,21 +48,11 @@
 // Please report these on the forum with reproducible test cases.
 
 #ifndef AUDIO_BLOCK_SAMPLES
-#if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1052__) || defined(__IMXRT1062__)
 #define AUDIO_BLOCK_SAMPLES  128
-#elif defined(__MKL26Z64__)
-#define AUDIO_BLOCK_SAMPLES  64
-#endif
 #endif
 
 #ifndef AUDIO_SAMPLE_RATE_EXACT
-#if defined(__MK20DX128__) || defined(__MK20DX256__) || defined(__MK64FX512__) || defined(__MK66FX1M0__)
-#define AUDIO_SAMPLE_RATE_EXACT 44117.64706 // 48 MHz / 1088, or 96 MHz * 2 / 17 / 256
-#elif defined(__MKL26Z64__)
-#define AUDIO_SAMPLE_RATE_EXACT 22058.82353 // 48 MHz / 2176, or 96 MHz * 1 / 17 / 256
-#elif defined(__IMXRT1052__) || defined(__IMXRT1062__)
 #define AUDIO_SAMPLE_RATE_EXACT 44100
-#endif
 #endif
 
 #define AUDIO_SAMPLE_RATE AUDIO_SAMPLE_RATE_EXACT
@@ -76,7 +66,6 @@ typedef struct audio_block_struct {
 	uint8_t  reserved1;
 	uint16_t memory_pool_index;
 	int16_t  data[AUDIO_BLOCK_SAMPLES];
-	int16_t x;/////////////////////////////
 } audio_block_t;
 
 
@@ -116,12 +105,8 @@ protected:
 	AudioStream::initialize_memory(data, num); \
 })
 
-#if defined(__IMXRT1052__) || defined(__IMXRT1062__)
-#define CYCLE_COUNTER_APPROX_PERCENT(n) 0
-#else
-#define CYCLE_COUNTER_APPROX_PERCENT(n) (((n) + (F_CPU / 32 / AUDIO_SAMPLE_RATE * AUDIO_BLOCK_SAMPLES / 100)) / (F_CPU / 16 / AUDIO_SAMPLE_RATE * AUDIO_BLOCK_SAMPLES / 100))
-#endif
-	
+#define CYCLE_COUNTER_APPROX_PERCENT(n) (((n) + (F_CPU_ACTUAL / 32 / AUDIO_SAMPLE_RATE * AUDIO_BLOCK_SAMPLES / 100)) / (F_CPU_ACTUAL / 16 / AUDIO_SAMPLE_RATE * AUDIO_BLOCK_SAMPLES / 100))
+
 #define AudioProcessorUsage() (CYCLE_COUNTER_APPROX_PERCENT(AudioStream::cpu_cycles_total))
 #define AudioProcessorUsageMax() (CYCLE_COUNTER_APPROX_PERCENT(AudioStream::cpu_cycles_total_max))
 #define AudioProcessorUsageMaxReset() (AudioStream::cpu_cycles_total_max = AudioStream::cpu_cycles_total)

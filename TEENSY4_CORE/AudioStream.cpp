@@ -32,17 +32,7 @@
 #include <Arduino.h>
 #include "AudioStream.h"
 
-#if defined(__MKL26Z64__)
-  #define MAX_AUDIO_MEMORY 6144
-#elif defined(__MK20DX128__)
-  #define MAX_AUDIO_MEMORY 12288
-#elif defined(__MK20DX256__)
-  #define MAX_AUDIO_MEMORY 49152
-#elif defined(__MK64FX512__)
-  #define MAX_AUDIO_MEMORY 163840
-#elif defined(__MK66FX1M0__) || defined(__IMXRT1052__) || defined(__IMXRT1062__)
-  #define MAX_AUDIO_MEMORY 229376
-#endif
+#define MAX_AUDIO_MEMORY 229376
 
 #define NUM_MASKS  (((MAX_AUDIO_MEMORY / AUDIO_BLOCK_SAMPLES / 2) + 31) / 32)
 
@@ -320,32 +310,23 @@ AudioStream * AudioStream::first_update = NULL;
 void software_isr(void) // AudioStream::update_all()
 {
 	AudioStream *p;
-/*
-	ARM_DEMCR |= ARM_DEMCR_TRCENA;
-	ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
-*/	
-//digitalWriteFast(13,1);
 
-//	uint32_t totalcycles = ARM_DWT_CYCCNT;
-	//digitalWriteFast(2, HIGH);
+	uint32_t totalcycles = ARM_DWT_CYCCNT;
 	for (p = AudioStream::first_update; p; p = p->next_update) {
 		if (p->active) {
-//			uint32_t cycles = ARM_DWT_CYCCNT;
+			uint32_t cycles = ARM_DWT_CYCCNT;
 			p->update();
 			// TODO: traverse inputQueueArray and release
 			// any input blocks that weren't consumed?
-//			cycles = (ARM_DWT_CYCCNT - cycles) >> 4;
-//			p->cpu_cycles = cycles;
-//			if (cycles > p->cpu_cycles_max) p->cpu_cycles_max = cycles;
+			cycles = (ARM_DWT_CYCCNT - cycles) >> 4;
+			p->cpu_cycles = cycles;
+			if (cycles > p->cpu_cycles_max) p->cpu_cycles_max = cycles;
 		}
 	}
-	//digitalWriteFast(2, LOW);
-/*	
+
 	totalcycles = (ARM_DWT_CYCCNT - totalcycles) >> 4;;
 	AudioStream::cpu_cycles_total = totalcycles;
 	if (totalcycles > AudioStream::cpu_cycles_total_max)
 		AudioStream::cpu_cycles_total_max = totalcycles;
-*/	
-asm("DSB");
 }
 
