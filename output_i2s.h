@@ -31,6 +31,29 @@
 #include "AudioStream.h"
 #include "DMAChannel.h"
 
+/*
+typedef struct
+{
+  uint32_t CSR;
+  uint32_t CR1,CR2,CR3,CR4,CR5;
+  union {
+	uint32_t DR[8];
+	uint16_t DR16[16];
+  };
+  uint32_t FR[8];
+  uint32_t MR;
+} I2S_PORT;
+
+typedef struct
+{
+  uint32_t VERID;
+  uint32_t PARAM;
+  I2S_PORT TX;
+  uint32_t unused[9];
+  I2S_PORT RX;
+} I2S_STRUCT;
+*/
+
 class AudioOutputI2S : public AudioStream
 {
 public:
@@ -45,13 +68,13 @@ protected:
 	static audio_block_t *block_right_1st;
 	static bool update_responsibility;
 	static DMAChannel dma;
-	static void isr(void);
+	static void isr(void);	
 private:
 	static audio_block_t *block_left_2nd;
 	static audio_block_t *block_right_2nd;
 	static uint16_t block_left_offset;
 	static uint16_t block_right_offset;
-	audio_block_t *inputQueueArray[2];
+	audio_block_t *inputQueueArray[2];	
 };
 
 
